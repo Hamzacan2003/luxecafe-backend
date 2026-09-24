@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-    baseURL: 'https://localhost:7243/api', // veya kullandığınız port örn: http://localhost:5000/api
+    baseURL: 'https://luxecafe-backend.onrender.com/api',
 });
 
 // Giden her isteğe localStorage'daki token'ı ekle
