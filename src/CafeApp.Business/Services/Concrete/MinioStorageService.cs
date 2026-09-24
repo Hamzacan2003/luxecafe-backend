@@ -1,39 +1,31 @@
 ﻿using CafeApp.Business.Services.Abstract;
-using CafeApp.Business.Settings;
+using CloudinaryDotNet;
+using CloudinaryDotNet.Actions;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using Minio;
-using Minio.DataModel.Args;
 
 namespace CafeApp.Business.Services.Concrete;
 
 public class MinioStorageService : IStorageService
 {
-    private readonly IMinioClient _minioClient;
-    private readonly MinioSettings _settings;
+    private readonly Cloudinary _cloudinary;
     private readonly ILogger<MinioStorageService> _logger;
     private const string DefaultFallbackImage = "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600";
 
-    public MinioStorageService(IOptions<MinioSettings> settings, ILogger<MinioStorageService> logger)
+    public MinioStorageService(IConfiguration configuration, ILogger<MinioStorageService> logger)
     {
-        _settings = settings.Value;
         _logger = logger;
 
-        try
-        {
-            var client = new MinioClient()
-                .WithEndpoint(_settings.Endpoint)
-                .WithCredentials(_settings.AccessKey, _settings.SecretKey);
+        var cloudName = configuration["Cloudinary:CloudName"];
+        var apiKey = configuration["Cloudinary:ApiKey"];
+        var apiSecret = configuration["Cloudinary:ApiSecret"];
 
-            if (_settings.WithSSL)
-                client = client.WithSSL();
-
-            _minioClient = client.Build();
-        }
-        catch (Exception ex)
+        if (!string.IsNullOrEmpty(cloudName) && !string.IsNullOrEmpty(apiKey) && !string.IsNullOrEmpty(apiSecret))
         {
-            _logger.LogError(ex, "MinIO Client başlatılamadı.");
+            var account = new Account(cloudName, apiKey, apiSecret);
+            _cloudinary = new Cloudinary(account);
+            _cloudinary.Api.Secure = true;
         }
     }
 
@@ -42,27 +34,27 @@ public class MinioStorageService : IStorageService
         if (file == null || file.Length == 0)
             return DefaultFallbackImage;
 
+        if (_cloudinary == null)
+        {
+            _logger.LogWarning("Cloudinary yapılandırılmamış, varsayılan görsel kullanılıyor.");
+            return DefaultFallbackImage;
+        }
+
         try
         {
-            var extension = Path.GetExtension(file.FileName);
-            var objectName = $"{Guid.NewGuid():N}{extension}";
+            await using var stream = file.OpenReadStream();
+            var uploadParams = new ImageUploadParams
+            {
+                File = new FileDescription(file.FileName, stream),
+                Folder = "luxecafe_products"
+            };
 
-            using var stream = file.OpenReadStream();
-
-            // Dosyayı doğrudan yükle
-            await _minioClient.PutObjectAsync(new PutObjectArgs()
-                .WithBucket(_settings.BucketName)
-                .WithObject(objectName)
-                .WithStreamData(stream)
-                .WithObjectSize(file.Length)
-                .WithContentType(file.ContentType));
-
-            var protocol = _settings.WithSSL ? "https" : "http";
-            return $"{protocol}://{_settings.Endpoint}/{_settings.BucketName}/{objectName}";
+            var uploadResult = await _cloudinary.UploadAsync(uploadParams);
+            return uploadResult.SecureUrl?.ToString() ?? DefaultFallbackImage;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Dosya yüklenirken hata oluştu. Varsayılan resme dönülüyor.");
+            _logger.LogError(ex, "Görsel Cloudinary'ye yüklenirken hata oluştu.");
             return DefaultFallbackImage;
         }
     }
