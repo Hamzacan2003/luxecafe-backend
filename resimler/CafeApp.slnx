@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CafeApp.API/CafeApp.API.csproj" />
+    <Project Path="src/CafeApp.Business/CafeApp.Business.csproj" />
+    <Project Path="src/CafeApp.Core/CafeApp.Core.csproj" />
+    <Project Path="src/CafeApp.DataAccess/CafeApp.DataAccess.csproj" />
+  </Folder>
+</Solution>
